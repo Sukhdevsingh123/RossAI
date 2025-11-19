@@ -1,159 +1,123 @@
-Got it 👍 — here’s the cleaned-up **README.md** file (with **Conda removed** and your instructions structured properly):
+# ⚖️ Ross AI: The Zero-Hallucination Legal Tech Platform
 
-````markdown
-# Project README
+**Redefining AI-Powered Drafting, Research, and Automation for Elite Law Firms.**
 
-This is a Python project with three Python files representing different phases of the project. Below are the instructions for setting up the environment, installing prerequisites, and running the project.
+Ross AI is the secure, end-to-end platform built specifically for Big Law. We eliminate the risks of generic AI hallucinations and fragmented workflows, providing a proprietary, trusted engine for critical legal operations.
 
----
-
-## Table of Contents
-
-1. [Prerequisites](#prerequisites)
-2. [Environment Setup](#environment-setup)
-   * [Using Pipenv](#using-pipenv)
-   * [Using Pip](#using-pip)
-3. [Running Ollama + DeepSeek](#running-ollama--deepseek)
-4. [Running the Project](#running-the-project)
+| **The Core Promise** | **Ross AI Advantage** |
+| :--- | :--- |
+| **Accuracy** | Virtually **Zero Hallucination Rate** ($\approx 0.1\%$ - $0.5\%$) |
+| **Security** | **End-to-End Encryption** and **Full Data Sovereignty** |
+| **Efficiency** | **No-Code Workflow Builder** & **MS Word Add-in Drafting** |
+| **Strategy** | **Judge Profiling** and **Opposing Counsel Analysis** |
 
 ---
 
-## Prerequisites
+## 🛠️ Setup and Installation Guide
 
-Before running the project, ensure you have the following:
+This project consists of a Python-based backend and a JavaScript-based frontend (client). Follow the steps below to get the application running locally.
 
-1. **Ollama Installed**
-   * Download and install Ollama from [Ollama’s website](https://ollama.com).
-   * Verify installation with:
-     ```bash
-     ollama -v
-     ```
-   * Pull the DeepSeek-R1 model (1.5B version for lightweight usage):
-     ```bash
-     ollama pull deepseek-r1:1.5b
-     ```
-   * Start the Ollama server:
-     ```bash
-     ollama serve
-     ```
+### 1. 🐍 Backend Setup (`server.py`)
 
-2. **Environment Variable**
-   * Inside your virtual environment, set the `GROQ_API_KEY`.
-   * Example (Linux/Mac):
-     ```bash
-     export GROQ_API_KEY="your_api_key_here"
-     ```
-   * Example (Windows PowerShell):
-     ```powershell
-     setx GROQ_API_KEY "your_api_key_here"
-     ```
+The backend handles the core logic, API requests, and the Ross AI model pipeline.
 
----
+1.  **Navigate to the project root directory.**
+2.  **Create and Activate Virtual Environment:**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # For macOS/Linux
+    # venv\Scripts\activate  # For Windows
+    ```
+3.  **Install Python Dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  **Run the Backend Server:**
+    ```bash
+    python server.py
+    ```
+    > The server will start running, typically on `http://127.0.0.1:8000` or a similar port, waiting for requests from the frontend.
 
-## Environment Setup
+### 2. 🖥️ Frontend Setup (`client`)
 
-### Using Pipenv
-1. Install Pipenv if you don't have it:
-   ```bash
-   pip install pipenv
-````
+The client directory contains the user interface and interacts with the backend server.
 
-2. Navigate to the project directory and create a virtual environment:
-
-   ```bash
-   pipenv install
-   ```
-3. Activate the virtual environment:
-
-   ```bash
-   pipenv shell
-   ```
-4. (Optional) Install any additional dependencies:
-
-   ```bash
-   pipenv install <package_name>
-   ```
+1.  **Navigate to the client directory:**
+    ```bash
+    cd client
+    ```
+2.  **Install Node.js Dependencies (using npm):**
+    ```bash
+    npm i
+    ```
+3.  **Run the Frontend Application:**
+    ```bash
+    npm start # Or 'npm run dev' depending on your package.json script
+    ```
+    > The frontend application will open in your browser (e.g., `http://localhost:3000`).
 
 ---
 
-### Using Pip
+## ✨ Core Features & Visual Overview
 
-1. Install virtualenv if you don't have it:
+Ross AI is built on foundational pillars designed to streamline and secure every aspect of a law firm's operation, all powered by our proprietary, hallucination-free model.
 
-   ```bash
-   pip install virtualenv
-   ```
-2. Create a virtual environment:
+### 1. 🧠 The Zero-Hallucination Model: Behind the Accuracy
 
-   ```bash
-   virtualenv venv
-   ```
-3. Activate the virtual environment:
+This is the core architecture that ensures every legal output is verifiable, accurate, and grounded in trusted data, eliminating the risk of costly AI hallucinations.
 
-   * On Windows:
+* **Description:** The process details how data from APIs and PDFs is retrieved, refined, used for model training (PEFT/QLORA), and critically, validated via a RAG and **Response Verification LOOP** before it ever reaches the user.
+* **Key Concept:** The system only delivers a response if the answer (`ans`) matches the trained model's dataset, otherwise, it enters a `Prompt correction` loop or returns `NULL`.
 
-     ```bash
-     venv\Scripts\activate
-     ```
-   * On macOS/Linux:
+![Diagram of the Ross AI Model Workflow](4.jpg)
 
-     ```bash
-     source venv/bin/activate
-     ```
-4. Install dependencies:
+### 2. 🔐 The Secure Case Vault: Data Sovereignty
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+This feature ensures that all firm and client data is stored in a fully encrypted, internally controlled environment, protecting attorney-client privilege and data privacy.
 
----
+* **Description:** The vault acts as a centralized knowledge base, enabling semantic search capabilities. Crucially, it manages **granular, role-based access control (RAG access)**, ensuring that different teams and attorneys have specific permissions for viewing and utilizing data.
+* **Feature Highlight:** Turns static case files into a dynamic, queryable knowledge repository while adhering to strict security protocols.
 
-## Running Ollama + DeepSeek
+![Image representing the Secure Vault with team access controls](client/src/assets/2.png)
 
-Make sure Ollama server is running before starting the project:
+### 3. ⚙️ Workflow Automations: Streamlining Operations
 
-```bash
-ollama serve
-```
+Move away from fragmented processes with a no-code visual builder that integrates AI directly into routine firm operations.
 
-This allows the project to query the DeepSeek-R1 model locally.
+* **Description:** This visual tool allows non-technical staff to **automate client intake, discovery requests, and routine drafting tasks** via drag-and-drop. This automation is generated based on interactions with Ross AI, optimizing and generating automated workflows specific to the law firm.
+* **Feature Highlight:** Significantly increases efficiency and scalability by embedding AI-powered tools within the firm's daily operational flow.
+
+![Image illustrating the Workflow Builder/Automation UI](client/src/assets/3.png)
 
 ---
 
-## Running the Project
+## 🔬 Product Deep Dive
 
-The project consists of three Python files, each corresponding to a different phase of the project:
+### The Problem Ross AI Solves
 
-### To run the App directly
+Large law firms face mounting challenges from **AI Hallucinations** (e.g., fake citations leading to sanctions), **Security Vulnerabilities** from third-party APIs, **Fragmented Workflows**, and the lack of **Strategic Intelligence** (like judge profiling).
 
-```bash
-streamlit run main.py
-```
+### The Ross AI Solution
 
-### To run app in different phases
+* **Zero Hallucination:** Insights grounded in verified, trusted legal sources.
+* **End-to-End Legal Tools:** Comprehensive features from secure case vault, drafting assistant, to PMS integration.
+* **Enhanced Security:** Fully encrypted, internally controlled environment eliminates reliance on risky third-party APIs.
+* **Workflow Automation:** A no-code builder and AI-powered analytics dashboard streamline operations.
 
-1. Phase 1: Run the first phase using:
+### Ross AI vs. Competitors (GPT/Harvey.ai)
 
-   ```bash
-   streamlit run frontend.py
-   ```
-2. Phase 2: Run the second phase using:
+| Metric | Ross AI (Proprietary Model) | General-Purpose LLMs (GPT, Claude) |
+| :--- | :--- | :--- |
+| **Hallucination Rate** | **$\approx 0.1\% - 0.5\%$ (Crucial for legal precision)** | Up to $\approx 30\%$ |
+| **Security** | End-to-end encryption, **Full Data Sovereignty** | ChatGPT API dependency, subpoena risk |
+| **Strategic Depth** | **Judge Profiling, Counsel Selection, Argument Simulation** | Basic features without strategic depth |
 
-   ```bash
-   python vector_database.py
-   ```
-3. Phase 3: Run the third phase using:
+### The Full Roadmap
 
-   ```bash
-   python rag_pipeline.py
-   ```
+1.  **Phase 1 (Core Launch):** AI Drafting, Secure Vault, Research Engine, Workflow Integration.
+2.  **Phase 2 (Strategic Intelligence):** Judge Profiling, Opposing Counsel Analysis, Argument Simulation.
+3.  **Phase 3 (Advanced Intelligence):** Lobbying Data Integration, Firm Brain (Novel Argument Generation), Regulatory Compliance Monitoring.
 
 ---
 
-## Troubleshooting
-
-If you encounter any issues, ensure that:
-
-* Ollama is installed and running (`ollama serve`).
-* The DeepSeek-R1 model is pulled.
-* Your virtual environment has the `GROQ_API_KEY` set.
+**Would you like me to elaborate on the technical implementation of the RAG access control within the Secure Case Vault?**

@@ -4,8 +4,8 @@ import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-// const API_BASE = "https://lexicore.onrender.com";
-const API_BASE="http://0.0.0.0:8000";
+const API_BASE = "https://rossai.onrender.com";
+// const API_BASE="http://0.0.0.0:8000";
 function Vault() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);

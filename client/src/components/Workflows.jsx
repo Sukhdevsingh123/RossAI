@@ -130,38 +130,7 @@ function CustomNode({
   );
 }
 
-// ✅ Sidebar Component
-// function Sidebar({ addNode }) {
-//   return (
-//     <div style={{ width: 250, padding: 10, borderRight: "1px solid #ccc" }}>
-//       <h3 style={{ marginBottom: 10 }}>Nodes Library</h3>
-//       {nodeItems.map((node) => (
-//         <div
-//           key={node.label}
-//           draggable
-//           onDragStart={(e) => e.dataTransfer.setData("nodeType", node.label)}
-//           onClick={() => addNode(node.label)}
-//           style={{
-//             display: "flex",
-//             flexDirection: "column",
-//             padding: "10px",
-//             marginBottom: "8px",
-//             border: "1px solid #ddd",
-//             borderRadius: "8px",
-//             background: "#f9f9f9",
-//             cursor: "pointer",
-//           }}
-//         >
-//           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-//             {node.icon}
-//             <span style={{ fontWeight: 600 }}>{node.label}</span>
-//           </div>
-//           <span style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>{node.sub}</span>
-//         </div>
-//       ))}
-//     </div>
-//   );
-// }
+
 
 function Sidebar({ addNode }) {
   return (
