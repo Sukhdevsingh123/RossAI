@@ -1,4 +1,5 @@
 # ⚖️ Ross AI: The Zero-Hallucination Legal Tech Platform
+![Image representing RossAI](client/src/assets/1.png)
 
 **Redefining AI-Powered Drafting, Research, and Automation for Elite Law Firms.**
 
@@ -69,7 +70,7 @@ This is the core architecture that ensures every legal output is verifiable, acc
 * **Description:** The process details how data from APIs and PDFs is retrieved, refined, used for model training (PEFT/QLORA), and critically, validated via a RAG and **Response Verification LOOP** before it ever reaches the user.
 * **Key Concept:** The system only delivers a response if the answer (`ans`) matches the trained model's dataset, otherwise, it enters a `Prompt correction` loop or returns `NULL`.
 
-![Diagram of the Ross AI Model Workflow](4.jpg)
+![Diagram of the Ross AI Model Workflow](client/src/assets/4.png)
 
 ### 2. 🔐 The Secure Case Vault: Data Sovereignty
 
