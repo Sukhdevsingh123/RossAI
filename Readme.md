@@ -114,11 +114,6 @@ Large law firms face mounting challenges from **AI Hallucinations** (e.g., fake 
 | **Strategic Depth** | **Judge Profiling, Counsel Selection, Argument Simulation** | Basic features without strategic depth |
 
 ### The Full Roadmap
-
-1.  **Phase 1 (Core Launch):** AI Drafting, Secure Vault, Research Engine, Workflow Integration.
-2.  **Phase 2 (Strategic Intelligence):** Judge Profiling, Opposing Counsel Analysis, Argument Simulation.
-3.  **Phase 3 (Advanced Intelligence):** Lobbying Data Integration, Firm Brain (Novel Argument Generation), Regulatory Compliance Monitoring.
-
 ---
 
 **Would you like me to elaborate on the technical implementation of the RAG access control within the Secure Case Vault?**
