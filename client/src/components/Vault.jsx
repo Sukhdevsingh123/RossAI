@@ -1,289 +1,694 @@
 import { useEffect, useState, useRef } from "react";
-import { FiFileText, FiTrash2, FiSend } from "react-icons/fi";
+import {
+  FiFileText,
+  FiTrash2,
+  FiSend,
+  FiUpload,
+  FiSearch,
+  FiMessageCircle,
+  FiUserPlus,
+  FiUserMinus,
+  FiUsers,
+} from "react-icons/fi";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useAuth } from "../contexts/AuthContext";
 
-const API_BASE = "https://rossai.onrender.com";
-// const API_BASE="http://0.0.0.0:8000";
 function Vault() {
-  const [files, setFiles] = useState([]);
+  const { getAuthHeaders, API_BASE, user } = useAuth();
+  
+  // Define role checks first
+  const isOwner = user?.roles?.includes("owner");
+  const isAdmin = user?.roles?.includes("admin");
+  const isManager = user?.roles?.includes("manager");
+  const canManageMembers = isOwner || isAdmin || isManager;
+  
+  // Set default role based on user's role
+  const getDefaultRole = () => {
+    if (isOwner) return "admin";
+    if (isAdmin) return "manager";
+    if (isManager) return "member";
+    return "member";
+  };
+  
+  const [activeTab, setActiveTab] = useState("upload");
   const [loading, setLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [query, setQuery] = useState("");
-  const [asking, setAsking] = useState(false);
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [conversations, setConversations] = useState({});
+  // Upload state
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
-  const inputRef = useRef(null);
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
-  const fetchFiles = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/files`);
-      const data = await res.json();
-      if (data.status === "success") setFiles(data.files);
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
+  // Chat state
+  const [chatQuery, setChatQuery] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatting, setChatting] = useState(false);
 
-  const deleteFile = async (filename) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/files/${filename}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (data.status === "success") {
-        setFiles((prev) => prev.filter((f) => f !== filename));
-        setConversations((prev) => {
-          const newConvs = { ...prev };
-          delete newConvs[filename];
-          return newConvs;
-        });
-        if (selectedFile === filename) {
-          setSelectedFile(null);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  // Member management state
+  const [memberUserId, setMemberUserId] = useState("");
+  const [memberCompanyId, setMemberCompanyId] = useState(user?.company_id || "");
+  const [memberTeamId, setMemberTeamId] = useState(user?.team_id || "");
+  const [memberProjectId, setMemberProjectId] = useState(user?.project_id || "");
+  const [removingMemberId, setRemovingMemberId] = useState("");
+  const [memberRole, setMemberRole] = useState(getDefaultRole());
+  
+  // Update role when user changes
+  useEffect(() => {
+    setMemberRole(getDefaultRole());
+  }, [isOwner, isAdmin, isManager]);
 
-  const handleAsk = async () => {
-    if (!selectedFile) {
-      const id = Date.now();
-      setConversations((prev) => ({
-        ...prev,
-        general: [...(prev.general || []), { id, text: "⚠️ Please select a file first!" }],
-      }));
+  const fileInputRef = useRef(null);
+  const chatInputRef = useRef(null);
+
+  // Upload PDF
+  const handleUpload = async () => {
+    if (!uploadFile) {
+      setError("Please select a PDF file");
       return;
     }
-    if (!query.trim()) return;
 
-    setAsking(true);
+    if (uploadFile.type !== "application/pdf") {
+      setError("Only PDF files are allowed");
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+    setSuccess("");
+
     try {
-      const res = await fetch(`${API_BASE}/api/ask`, {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+
+      const response = await fetch(`${API_BASE}/upload`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: query,
-          task: "qa",
-          file: selectedFile,
-          top_k: 6,
-          model,
-        }),
+        headers: getAuthHeaders(),
+        body: formData,
       });
-      const data = await res.json();
-      const responseText = data.answer || "⚠️ No response.";
-      const sources = data.sources || [];
 
-      const newId = Date.now();
-      const newResponse = {
-        id: newId,
-        text: "",
-        fullText: responseText,
-        question: query,
-        citations: sources,
-      };
+      const data = await response.json();
 
-      setConversations((prev) => ({
-        ...prev,
-        [selectedFile]: [...(prev[selectedFile] || []), newResponse],
-      }));
-      setQuery("");
+      if (!response.ok) {
+        throw new Error(data.detail || "Upload failed");
+      }
 
-      let i = 0;
-      const interval = setInterval(() => {
-        setConversations((prev) => ({
-          ...prev,
-          [selectedFile]: prev[selectedFile].map((r) =>
-            r.id === newId ? { ...r, text: r.fullText.slice(0, i + 1) } : r
-          ),
-        }));
-        i++;
-        if (i >= responseText.length) clearInterval(interval);
-      }, 18);
+      setSuccess(`File uploaded successfully! Document ID: ${data.doc_id}, Chunks: ${data.chunks}`);
+      setUploadFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (err) {
-      const newId = Date.now();
-      setConversations((prev) => ({
-        ...prev,
-        [selectedFile]: [
-          ...(prev[selectedFile] || []),
-          { id: newId, text: "⚠️ Error fetching response." },
-        ],
-      }));
+      setError(err.message || "Upload failed");
     } finally {
-      setAsking(false);
+      setUploading(false);
     }
   };
 
-  useEffect(() => {
-    fetchFiles();
-  }, []);
+  // Search documents
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setError("Please enter a search query");
+      return;
+    }
 
-  const currentResponses = selectedFile ? conversations[selectedFile] || [] : [];
+    setSearching(true);
+    setError("");
+    setSearchResults([]);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/search?query=${encodeURIComponent(searchQuery)}`,
+        {
+          method: "GET",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Search failed");
+      }
+
+      if (data.results && data.results.length > 0) {
+        setSearchResults(data.results);
+      } else {
+        setSearchResults([]);
+        setError("No relevant documents found.");
+      }
+    } catch (err) {
+      setError(err.message || "Search failed");
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Chat with documents
+  const handleChat = async () => {
+    if (!chatQuery.trim()) {
+      return;
+    }
+
+    setChatting(true);
+    setError("");
+
+    const question = chatQuery;
+    setChatQuery("");
+
+    // Add user question to history
+    const userMessage = {
+      id: Date.now(),
+      type: "user",
+      text: question,
+    };
+    setChatHistory((prev) => [...prev, userMessage]);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/chat?query=${encodeURIComponent(question)}`,
+        {
+          method: "GET",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Chat failed");
+      }
+
+      const assistantMessage = {
+        id: Date.now() + 1,
+        type: "assistant",
+        text: data.answer || "No response",
+      };
+      setChatHistory((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      const errorMessage = {
+        id: Date.now() + 1,
+        type: "error",
+        text: err.message || "Error fetching response",
+      };
+      setChatHistory((prev) => [...prev, errorMessage]);
+    } finally {
+      setChatting(false);
+    }
+  };
+
+  // Add member
+  const handleAddMember = async () => {
+    if (!memberUserId || !memberCompanyId || !memberTeamId || !memberProjectId) {
+      setError("Please fill in all required fields");
+      return;
+    }
+
+    if (!canManageMembers) {
+      setError("Only owner, admins, or managers can add members");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const params = new URLSearchParams({
+        user_id: memberUserId,
+        company_id: memberCompanyId,
+        team_id: memberTeamId,
+        project_id: memberProjectId,
+        role: memberRole,
+      });
+
+      const response = await fetch(`${API_BASE}/add-member?${params.toString()}`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to add member");
+      }
+
+      setSuccess(data.message || "Member added successfully");
+      setMemberUserId("");
+      setMemberRole(getDefaultRole());
+    } catch (err) {
+      setError(err.message || "Failed to add member");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Remove member
+  const handleRemoveMember = async () => {
+    if (!removingMemberId || !memberCompanyId || !memberTeamId || !memberProjectId) {
+      setError("Please fill in all required fields");
+      return;
+    }
+
+    if (!canManageMembers) {
+      setError("Only owner, admins, or managers can remove members");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const params = new URLSearchParams({
+        user_id: removingMemberId,
+        company_id: memberCompanyId,
+        team_id: memberTeamId,
+        project_id: memberProjectId,
+      });
+
+      const response = await fetch(`${API_BASE}/remove-member?${params.toString()}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to remove member");
+      }
+
+      setSuccess(data.message || "Member removed successfully");
+      setRemovingMemberId("");
+    } catch (err) {
+      setError(err.message || "Failed to remove member");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Clear messages after 5 seconds
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError("");
+        setSuccess("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
+  const tabs = [
+    { id: "upload", label: "Upload", icon: <FiUpload /> },
+    { id: "search", label: "Search", icon: <FiSearch /> },
+    { id: "chat", label: "Chat", icon: <FiMessageCircle /> },
+    { id: "members", label: "Members", icon: <FiUsers /> },
+  ];
 
   return (
     <div className="p-8 h-full bg-gray-50 font-sans overflow-y-auto flex flex-col">
       <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b pb-3">
-        📂 Legal Vault
+        📂 Secure Vault
       </h2>
 
-      {/* Files Section */}
-      <div className="mb-6 bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition-shadow">
-        <h3 className="text-xl font-semibold text-gray-700 mb-4">Uploaded Files</h3>
-        {loading ? (
-          <p className="text-gray-500 text-sm">Loading files...</p>
-        ) : files.length === 0 ? (
-          <p className="text-gray-500 text-sm">No files uploaded yet.</p>
-        ) : (
-          <ul className="space-y-3">
-            {files.map((file, idx) => {
-              const isActive = selectedFile === file;
-              return (
-                <li
-                  key={idx}
-                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                    isActive
-                      ? "bg-blue-50 border border-blue-400 shadow-inner"
-                      : "bg-gray-50 border border-gray-200 hover:bg-gray-100"
-                  }`}
-                  onClick={() => {
-                    if (selectedFile === file) {
-                      setSelectedFile(null);
-                    } else {
-                      setSelectedFile(file);
-                    }
-                  }}
-                >
-                  <div className="flex items-center space-x-3">
-                    <FiFileText className={`text-xl ${isActive ? "text-blue-600" : "text-blue-500"}`} />
-                    <span className="font-medium text-gray-800">{file}</span>
-                    {isActive && (
-                      <span className="ml-2 px-2 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
-                        Open
-                      </span>
+      {/* Tabs */}
+      <div className="mb-6 flex space-x-2 border-b">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center space-x-2 px-4 py-2 border-b-2 transition ${
+              activeTab === tab.id
+                ? "border-blue-600 text-blue-600 font-semibold"
+                : "border-transparent text-gray-600 hover:text-gray-800"
+            }`}
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+          {success}
+        </div>
+      )}
+
+      {/* Upload Tab */}
+      {activeTab === "upload" && (
+        <div className="bg-white rounded-xl shadow-md p-6">
+          <h3 className="text-xl font-semibold text-gray-700 mb-4">
+            Upload PDF Document
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select PDF File
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+              />
+              {uploadFile && (
+                <p className="mt-2 text-sm text-gray-600">Selected: {uploadFile.name}</p>
                     )}
                   </div>
-                  <div className="flex items-center space-x-2">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFile(file);
-                        inputRef.current?.focus();
-                      }}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium transition"
-                      title="Ask about this file"
-                    >
-                      Ask
+              onClick={handleUpload}
+              disabled={uploading || !uploadFile}
+              className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center"
+            >
+              <FiUpload className="mr-2" />
+              {uploading ? "Uploading..." : "Upload PDF"}
                     </button>
+          </div>
+        </div>
+      )}
+
+      {/* Search Tab */}
+      {activeTab === "search" && (
+        <div className="flex-1 flex flex-col">
+          <div className="bg-white rounded-xl shadow-md p-6 mb-4">
+            <h3 className="text-xl font-semibold text-gray-700 mb-4">
+              Search Documents
+            </h3>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="Enter your search query..."
+              />
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteFile(file);
-                      }}
-                      className="text-red-500 hover:text-red-700 transition"
-                      title="Delete file"
-                    >
-                      <FiTrash2 />
+                onClick={handleSearch}
+                disabled={searching}
+                className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center"
+              >
+                <FiSearch className="mr-2" />
+                {searching ? "Searching..." : "Search"}
                     </button>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </div>
 
-      {/* Conversations Section */}
-      <div className="flex-1 mb-4 bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow overflow-y-auto">
-        <h3 className="text-xl font-semibold text-gray-700 mb-4">Conversations</h3>
-        {selectedFile ? (
-          currentResponses.length === 0 ? (
-            <p className="text-gray-500 text-sm">No chat history yet for this file.</p>
-          ) : (
-            <ul className="space-y-6">
-              {currentResponses.map((res) => (
-                <motion.li
-                  key={res.id}
+          {searchResults.length > 0 && (
+            <div className="bg-white rounded-xl shadow-md p-6 overflow-y-auto">
+              <h4 className="text-lg font-semibold text-gray-700 mb-4">
+                Found {searchResults.length} results:</h4>
+              <div className="space-y-4">
+                {searchResults.map((result, idx) => (
+                  <motion.div
+                    key={idx}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  {res.question && (
-                    <p className="text-blue-700 font-medium mb-3">
-                      Q: {res.question}
-                    </p>
-                  )}
-                  <div className="text-gray-800 space-y-2">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {res.text}
-                    </ReactMarkdown>
+                    className="border rounded-lg p-4 bg-gray-50"
+                  >
+                    <div className="font-medium text-gray-800 mb-2">
+                      {result.filename || "N/A"}
                   </div>
-                  {res.citations && res.citations.length > 0 && (
-                    <div className="mt-4 bg-white border rounded p-3 text-sm space-y-2">
-                      <div className="font-medium text-gray-700 mb-2">Sources:</div>
-                      <ul className="list-disc ml-5 space-y-1">
-                        {res.citations.map((c, i) => (
-                          <li key={i} className="text-gray-700">
-                            <span className="font-mono">{c.source}</span>
-                            {c.page !== undefined && c.page !== null
-                              ? `, p.${c.page}`
-                              : ""}
-                            {c.filetype ? ` (${c.filetype})` : ""}
-                          </li>
-                        ))}
-                      </ul>
+                    <div className="text-sm text-gray-600 mb-2">
+                      Page: {result.page || "N/A"} | Score:{" "}
+                      {result.score ? result.score.toFixed(3) : "N/A"}
                     </div>
-                  )}
-                </motion.li>
-              ))}
-            </ul>
-          )
-        ) : (
-          <p className="text-gray-500 text-sm">Select a file to view its conversation.</p>
+                    <div className="text-gray-700">{result.content}</div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
         )}
       </div>
+      )}
 
-      {/* Ask Section Below Conversations */}
-      {selectedFile && (
-        <div className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition-shadow">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Model
-            </label>
-            <select
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 transition"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-            >
-              <option value="gpt-4o-mini">Lawyer 1</option>
-              <option value="gpt-4">Lawyer 2</option>
-              <option value="gpt-3.5-turbo">Lawyer 3</option>
-            </select>
+      {/* Chat Tab */}
+      {activeTab === "chat" && (
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1 bg-white rounded-xl shadow-md p-6 mb-4 overflow-y-auto">
+            <h3 className="text-xl font-semibold text-gray-700 mb-4">Chat with Documents</h3>
+            {chatHistory.length === 0 ? (
+              <p className="text-gray-500 text-sm">Start a conversation by asking a question...</p>
+            ) : (
+              <div className="space-y-4">
+                {chatHistory.map((msg) => (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`p-4 rounded-lg ${
+                      msg.type === "user"
+                        ? "bg-blue-50 ml-auto max-w-2xl"
+                        : msg.type === "error"
+                        ? "bg-red-50 max-w-2xl"
+                        : "bg-gray-50 max-w-2xl"
+                    }`}
+                  >
+                    {msg.type === "user" ? (
+                      <p className="text-blue-800 font-medium">{msg.text}</p>
+                    ) : (
+                      <div className="text-gray-800">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.text}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="flex gap-3 items-center">
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <div className="flex gap-3">
             <input
-              ref={inputRef}
+                ref={chatInputRef}
               type="text"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAsk()}
-              placeholder="Ask your question..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                value={chatQuery}
+                onChange={(e) => setChatQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleChat()}
+                placeholder="Ask a question about your documents..."
             />
             <button
-              onClick={handleAsk}
-              disabled={asking}
+                onClick={handleChat}
+                disabled={chatting}
               className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center"
             >
               <FiSend className="mr-2" />
-              {asking ? "Thinking…" : "Ask"}
+                {chatting ? "Thinking..." : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Members Tab */}
+      {activeTab === "members" && (
+        <div className="space-y-6">
+          {!canManageMembers && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800 text-sm">
+                <strong>Note:</strong> Only owner, admins, and managers can add or remove members. 
+                Your current role: <strong>{user?.roles?.[0] || "member"}</strong>
+              </p>
+            </div>
+          )}
+          {canManageMembers && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-blue-800 text-sm">
+                <strong>Role Hierarchy:</strong>
+                {isOwner && " Owner → Admin → Manager → Member"}
+                {isAdmin && !isOwner && " Admin → Manager → Member"}
+                {isManager && !isAdmin && !isOwner && " Manager → Member"}
+                <br />
+                {isOwner && "You can add admins. Admins can then add managers."}
+                {isAdmin && !isOwner && "You can add managers. Managers can then add members."}
+                {isManager && !isAdmin && !isOwner && "You can add members."}
+              </p>
+            </div>
+          )}
+          {/* Add Member */}
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
+              <FiUserPlus className="mr-2" />
+              Add Member
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  User ID
+                </label>
+                <input
+                  type="text"
+                  value={memberUserId}
+                  onChange={(e) => setMemberUserId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="user_id"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Company ID
+                  </label>
+                  <input
+                    type="text"
+                    value={memberCompanyId}
+                    onChange={(e) => setMemberCompanyId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Team ID
+                  </label>
+                  <input
+                    type="text"
+                    value={memberTeamId}
+                    onChange={(e) => setMemberTeamId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Project ID
+                  </label>
+                  <input
+                    type="text"
+                    value={memberProjectId}
+                    onChange={(e) => setMemberProjectId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role
+                </label>
+                <select
+                  value={memberRole}
+                  onChange={(e) => setMemberRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {isOwner ? (
+                    <option value="admin">Admin</option>
+                  ) : isAdmin ? (
+                    <option value="manager">Manager</option>
+                  ) : isManager ? (
+                    <option value="member">Member</option>
+                  ) : (
+                    <option value="member">Member (No permission)</option>
+                  )}
+                </select>
+                {isOwner && (
+                  <p className="mt-1 text-xs text-blue-600">
+                    Owner can only add admins. There can be only one owner per project.
+                  </p>
+                )}
+                {isAdmin && !isOwner && (
+                  <p className="mt-1 text-xs text-blue-600">
+                    Admin can only add managers. Managers can then add members.
+                  </p>
+                )}
+                {isManager && !isAdmin && !isOwner && (
+                  <p className="mt-1 text-xs text-blue-600">
+                    Manager can only add members.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={handleAddMember}
+                disabled={loading}
+                className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+              >
+                {loading ? "Adding..." : "Add Member"}
+              </button>
+            </div>
+          </div>
+
+          {/* Remove Member */}
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
+              <FiUserMinus className="mr-2" />
+              Remove Member
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  User ID to Remove
+                </label>
+                <input
+                  type="text"
+                  value={removingMemberId}
+                  onChange={(e) => setRemovingMemberId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="user_id"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Company ID
+                  </label>
+                  <input
+                    type="text"
+                    value={memberCompanyId}
+                    onChange={(e) => setMemberCompanyId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Team ID
+                  </label>
+                  <input
+                    type="text"
+                    value={memberTeamId}
+                    onChange={(e) => setMemberTeamId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Project ID
+                  </label>
+                  <input
+                    type="text"
+                    value={memberProjectId}
+                    onChange={(e) => setMemberProjectId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleRemoveMember}
+                disabled={loading}
+                className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+              >
+                {loading ? "Removing..." : "Remove Member"}
             </button>
+            </div>
           </div>
         </div>
       )}

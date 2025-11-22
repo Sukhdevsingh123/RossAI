@@ -160,7 +160,10 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiUser,
-  FiBarChart2, // Added Chart Icon
+  FiBarChart2,
+  FiLogIn,
+  FiUserPlus,
+  FiLogOut,
 } from "react-icons/fi";
 import Assistant from "./components/Assistant";
 import Vault from "./components/Vault";
@@ -169,7 +172,10 @@ import SettingsModal from "./components/SettingsModal";
 import AddMenu from "./components/AddMenu";
 import ChatHistoryModal from "./components/ChatHistoryModal";
 import ProfilePage from "./profile/ProfilePage";
-import Analytics from "./components/Analytics"; // Import Analytics
+import Analytics from "./components/Analytics";
+import Login from "./components/Login";
+import Signup from "./components/Signup";
+import { useAuth } from "./contexts/AuthContext";
 
 function App() {
   const [activeComponent, setActiveComponent] = useState("assistant");
@@ -179,12 +185,23 @@ function App() {
   const [sources, setSources] = useState([]);
   const [responses, setResponses] = useState([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSignupModal, setShowSignupModal] = useState(false);
+  const { isAuthenticated, logout, user } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && (activeComponent === "login" || activeComponent === "signup")) {
+      setActiveComponent("assistant");
+      setShowLoginModal(false);
+      setShowSignupModal(false);
+    }
+  }, [isAuthenticated]);
 
   const navItems = [
     { id: "assistant", icon: <FiMessageSquare />, label: "Assistant" },
     { id: "vault", icon: <FiFolder />, label: "Vault" },
     { id: "workflows", icon: <FiGrid />, label: "Workflows" },
-    { id: "analytics", icon: <FiBarChart2 />, label: "Analytics" }, // Added Analytics Item
+    { id: "analytics", icon: <FiBarChart2 />, label: "Analytics" },
     { id: "profile", icon: <FiUser />, label: "Profile" },
     { id: "chathistory", icon: <FiClock />, label: "Chat History" },
   ];
@@ -201,6 +218,8 @@ function App() {
 
   const handleNavClick = (id) => {
     if (id === "chathistory") setIsChatHistoryOpen(true);
+    else if (id === "login") setShowLoginModal(true);
+    else if (id === "signup") setShowSignupModal(true);
     else setActiveComponent(id);
   };
 
@@ -275,6 +294,42 @@ function App() {
             </button>
             {isAddOpen && !isSidebarCollapsed && <AddMenu />}
           </div>
+
+          {/* Login/Signup or User Info */}
+          {!isAuthenticated ? (
+            <div className="border-t border-gray-200 pt-2 space-y-1">
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="flex items-center w-full px-3 py-2 text-sm text-blue-600 rounded-md hover:bg-blue-50"
+              >
+                <FiLogIn className="text-lg" />
+                {!isSidebarCollapsed && <span className="ml-3">Login</span>}
+              </button>
+              <button
+                onClick={() => setShowSignupModal(true)}
+                className="flex items-center w-full px-3 py-2 text-sm text-purple-600 rounded-md hover:bg-purple-50"
+              >
+                <FiUserPlus className="text-lg" />
+                {!isSidebarCollapsed && <span className="ml-3">Sign Up</span>}
+              </button>
+            </div>
+          ) : (
+            user && !isSidebarCollapsed && (
+              <div className="border-t border-gray-200 pt-2 mt-2">
+                <div className="px-3 py-2 text-xs text-gray-500">
+                  <div>User: {user.user_id}</div>
+                  <div>Role: {user.roles?.[0] || "member"}</div>
+                </div>
+                <button
+                  onClick={logout}
+                  className="flex items-center w-full px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50 mt-2"
+                >
+                  <FiLogOut className="text-lg" />
+                  <span className="ml-3">Logout</span>
+                </button>
+              </div>
+            )
+          )}
         </div>
       </div>
 
@@ -290,9 +345,61 @@ function App() {
         )}
         {activeComponent === "vault" && <Vault sources={sources} responses={responses} />}
         {activeComponent === "workflows" && <WorkflowsPage />}
-        {activeComponent === "analytics" && <Analytics />} {/* Render Analytics */}
+        {activeComponent === "analytics" && <Analytics />}
         {activeComponent === "profile" && <ProfilePage />}
       </div>
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="relative">
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
+            >
+              ×
+            </button>
+            <Login onSuccess={() => setShowLoginModal(false)} />
+            <div className="mt-4 text-center bg-white p-4 rounded-lg">
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  setShowSignupModal(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 text-sm"
+              >
+                Don't have an account? Sign up
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Signup Modal */}
+      {showSignupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="relative">
+            <button
+              onClick={() => setShowSignupModal(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-2xl"
+            >
+              ×
+            </button>
+            <Signup onSuccess={() => setShowSignupModal(false)} />
+            <div className="mt-4 text-center bg-white p-4 rounded-lg">
+              <button
+                onClick={() => {
+                  setShowSignupModal(false);
+                  setShowLoginModal(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 text-sm"
+              >
+                Already have an account? Login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
