@@ -14,7 +14,6 @@ from openai import OpenAI
 
 app = FastAPI()
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,8 +24,13 @@ app.add_middleware(
 
 uploads_dir = "pdfs"
 os.makedirs(uploads_dir, exist_ok=True)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+HF_ENDPOINT_URL = "https://nxa044cp82ks3owk.us-east-1.aws.endpoints.huggingface.cloud/v1"
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+client = OpenAI(
+    base_url=HF_ENDPOINT_URL,
+    api_key=HF_TOKEN
+)
 
 # ---------- Upload API ----------
 @app.post("/api/upload")
@@ -118,7 +122,7 @@ class AskRequest(BaseModel):
     top_k: int = 6
     promptKey: Optional[str] = None
     customPrompt: Optional[str] = None
-    model: str = "gpt-4o-mini"  # ✅ new field
+    model: str = "SukhdevTechsteck/US-Law-v3"  # ✅ new field
 
 @app.post("/api/ask")
 async def ask(req: AskRequest):
@@ -134,6 +138,7 @@ async def ask(req: AskRequest):
         )
         return result
     except Exception as e:
+        print(f"❌ Error in /api/ask: {e}")
         return {"status": "error", "message": str(e)}
 
 JUDGE_DETECT_PROMPT = """
@@ -213,7 +218,7 @@ Judge profile JSON:
 
 class JudgeRequest(BaseModel):
     judge: str
-    model: str = "gpt-4o-mini"
+    model: str = "SukhdevTechsteck/US-Law-v3"
 
 @app.post("/api/judge")
 async def judge_router(req: JudgeRequest):
@@ -221,81 +226,71 @@ async def judge_router(req: JudgeRequest):
         user_msg = req.judge  # keeping same param name for compatibility
 
         # ---------------- STEP 1: Is this a judge query? ----------------
-        detect_prompt = JUDGE_DETECT_PROMPT.replace("{{MESSAGE}}", user_msg)
+        detect_prompt_str = f"System: Analyze message intent.\n\nUser: {JUDGE_DETECT_PROMPT.replace('{{MESSAGE}}', user_msg)}\n\nAssistant:"
 
-        detect_response = client.chat.completions.create(
+        detect_response = client.completions.create(
             model=req.model,
-            messages=[
-                {"role": "system", "content": "Analyze message intent."},
-                {"role": "user", "content": detect_prompt}
-            ],
-            temperature=0
+            prompt=detect_prompt_str,
+            temperature=0,
+            top_p=0.95,
+            max_tokens=20
         )
 
-        mode = detect_response.choices[0].message.content.strip()
+        mode = detect_response.choices[0].text.strip()
 
-        if mode == "normal_query":
+        if "normal_query" in mode:
             # Return a regular chat completion
-            normal_response = client.chat.completions.create(
+            normal_response = client.completions.create(
                 model=req.model,
-                messages=[
-                    {"role": "user", "content": user_msg}
-                ]
+                prompt=f"User: {user_msg}\n\nAssistant:",
+                top_p=0.95,
+                max_tokens=500
             )
             return {
                 "status": "success",
-                "answer": normal_response.choices[0].message.content
+                "answer": normal_response.choices[0].text
             }
 
         # ---------------- STEP 2: Extract judge name (optional) ----------------
-        name_prompt = JUDGE_NAME_PROMPT.replace("{{MESSAGE}}", user_msg)
-        name_response = client.chat.completions.create(
+        name_prompt_str = f"System: Extract judge names.\n\nUser: {JUDGE_NAME_PROMPT.replace('{{MESSAGE}}', user_msg)}\n\nAssistant:"
+        name_response = client.completions.create(
             model=req.model,
-            messages=[
-                {"role": "system", "content": "Extract judge names."},
-                {"role": "user", "content": name_prompt}
-            ],
-            temperature=0
+            prompt=name_prompt_str,
+            temperature=0,
+            top_p=0.95,
+            max_tokens=50
         )
 
-        judge_name = name_response.choices[0].message.content.strip()
+        judge_name = name_response.choices[0].text.strip()
 
         if judge_name.lower() == "none":
             judge_name = "Justice Placeholder"  # generates synthetic
 
         # ---------------- STEP 3: Generate full synthetic profile ----------------
-        profile_prompt = JUDGE_PROMPT.replace("{{JUDGE_NAME}}", judge_name)
+        profile_prompt_str = f"System: Generate fictional judge profiles.\n\nUser: {JUDGE_PROMPT.replace('{{JUDGE_NAME}}', judge_name)}\n\nAssistant:"
 
-        profile_response = client.chat.completions.create(
+        profile_response = client.completions.create(
             model=req.model,
-            messages=[
-                {"role": "system", "content": "Generate fictional judge profiles."},
-                {"role": "user", "content": profile_prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3
+            prompt=profile_prompt_str,
+            temperature=0.3,
+            top_p=0.95,
+            max_tokens=1000
         )
 
-        full_profile = profile_response.choices[0].message.content
+        full_profile = profile_response.choices[0].text
 
         # ---------------- STEP 4: Interpret user's question ----------------
-        interpret_prompt = (
-            INTERPRET_PROMPT
-            .replace("{{QUESTION}}", user_msg)
-            .replace("{{PROFILE}}", full_profile)
-        )
+        interpret_prompt_str = f"System: Return only relevant JSON fields.\n\nUser: {INTERPRET_PROMPT.replace('{{QUESTION}}', user_msg).replace('{{PROFILE}}', full_profile)}\n\nAssistant:"
 
-        interpret_response = client.chat.completions.create(
+        interpret_response = client.completions.create(
             model=req.model,
-            messages=[
-                {"role": "system", "content": "Return only relevant JSON fields."},
-                {"role": "user", "content": interpret_prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0
+            prompt=interpret_prompt_str,
+            temperature=0,
+            top_p=0.95,
+            max_tokens=1000
         )
 
-        filtered = interpret_response.choices[0].message.content
+        filtered = interpret_response.choices[0].text
 
         return {"status": "success", "profile": json.loads(filtered)}
 

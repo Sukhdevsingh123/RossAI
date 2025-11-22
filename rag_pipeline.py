@@ -1,9 +1,9 @@
 import json
 import os
 from typing import Optional, Dict, Any, List
-from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAI
 from langchain.schema import Document
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from vector_database import get_retriever
 
@@ -31,20 +31,16 @@ def _resolve_prompt(task: str, prompt_key: Optional[str], custom_prompt: Optiona
     }
     return defaults.get(task, defaults["qa"])
 
-def _make_prompt(template: str) -> ChatPromptTemplate:
+def _make_prompt(template: str) -> PromptTemplate:
+    # We insert the template text directly into the system prompt
     system = (
-        "{template}\n\n"
+        f"{template}\n\n"
         "Rules:\n"
-
         "- If context is insufficient, say so.\n"
         "- Keep answers clear and structured for lawyers.\n"
     )
-    return ChatPromptTemplate.from_messages(
-        [
-            ("system", system),
-            ("human", "User question: {question}\n\nContext:\n{context}"),
-        ]
-    ).partial(template=template)
+    full_template = f"System: {system}\n\nUser: {{question}}\n\nContext:\n{{context}}\n\nAssistant:"
+    return PromptTemplate(template=full_template, input_variables=["question", "context"])
 
 def _format_context(docs: List[Document]) -> str:
     chunks = []
@@ -91,15 +87,21 @@ def answer_query(
     docs = retriever.get_relevant_documents(question)
     context = _format_context(docs)
 
-    llm = ChatOpenAI(model=model, temperature=0.2)
-    prompt = _make_prompt(template)
-    chain = prompt | llm | StrOutputParser()
-    answer = chain.invoke({"question": question, "context": context})
+    try:
+        llm = OpenAI(
+            model=model,
+            temperature=0.2,
+            base_url="https://nxa044cp82ks3owk.us-east-1.aws.endpoints.huggingface.cloud/v1",
+            api_key=os.getenv("HF_TOKEN"),
+            model_kwargs={"top_p": 0.95}
+        )
+        prompt = _make_prompt(template)
+        # PromptTemplate -> LLM -> StrOutputParser
+        chain = prompt | llm | StrOutputParser()
+        answer = chain.invoke({"question": question, "context": context})
+    except Exception as e:
+        print(f"❌ Error in rag_pipeline: {e}")
+        raise e
 
     sources = _extract_citations(docs)
     return {"answer": answer, "sources": sources}
-
-
-
-
-

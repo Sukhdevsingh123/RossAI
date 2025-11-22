@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { motion } from "framer-motion";
 
 const API_BASE = "https://rossai.onrender.com";
-// const API_BASE="http://0.0.0.0:8000";
+// const API_BASE = "http://0.0.0.0:8000";
 function Assistant({ sources, setSources, responses, setResponses }) {
   const [query, setQuery] = useState("");
   const [loadingAsk, setLoadingAsk] = useState(false);
@@ -14,7 +14,7 @@ function Assistant({ sources, setSources, responses, setResponses }) {
   const [prompts, setPrompts] = useState({ shared: {}, private: {} });
   const [promptKey, setPromptKey] = useState("qa_default");
   const [customPrompt, setCustomPrompt] = useState("");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [model, setModel] = useState("SukhdevTechsteck/US-Law-v3");
 
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
@@ -23,7 +23,7 @@ function Assistant({ sources, setSources, responses, setResponses }) {
     fetch(`${API_BASE}/api/prompts`)
       .then((r) => r.json())
       .then(setPrompts)
-      .catch(() => {});
+      .catch(() => { });
 
     const handleDrop = (e) => {
       e.preventDefault();
@@ -40,51 +40,51 @@ function Assistant({ sources, setSources, responses, setResponses }) {
 
     // ✅ Keyboard Shortcuts Handler
     // ✅ Keyboard Shortcuts Handler (Functional only)
-const handleKeyDown = (e) => {
-  // Open new chat → clear responses (Alt+Shift+N)
-  if (e.altKey && e.shiftKey && e.code === "KeyN") {
-    e.preventDefault();
-    setResponses([]);
-  }
+    const handleKeyDown = (e) => {
+      // Open new chat → clear responses (Alt+Shift+N)
+      if (e.altKey && e.shiftKey && e.code === "KeyN") {
+        e.preventDefault();
+        setResponses([]);
+      }
 
-  // Open upload module → click file input (Alt+Shift+U)
-  if (e.altKey && e.shiftKey && e.code === "KeyU") {
-    e.preventDefault();
-    fileInputRef.current?.click();
-  }
+      // Open upload module → click file input (Alt+Shift+U)
+      if (e.altKey && e.shiftKey && e.code === "KeyU") {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      }
 
-  // Edit last message (Alt+E)
-  if (e.altKey && !e.shiftKey && e.code === "KeyE") {
-    e.preventDefault();
-    const last = [...responses].reverse().find((r) => r.question);
-    if (last) {
-      setQuery(last.question);
-      setResponses((prev) => prev.filter((r) => r.id !== last.id));
-    }
-  }
+      // Edit last message (Alt+E)
+      if (e.altKey && !e.shiftKey && e.code === "KeyE") {
+        e.preventDefault();
+        const last = [...responses].reverse().find((r) => r.question);
+        if (last) {
+          setQuery(last.question);
+          setResponses((prev) => prev.filter((r) => r.id !== last.id));
+        }
+      }
 
-  // Focus chat input (Shift+Escape)
-  if (!e.altKey && e.shiftKey && e.code === "Escape") {
-    e.preventDefault();
-    inputRef.current?.focus();
-  }
+      // Focus chat input (Shift+Escape)
+      if (!e.altKey && e.shiftKey && e.code === "Escape") {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
 
-  // Copy last response to clipboard (Alt+Shift+C)
-  if (e.altKey && e.shiftKey && e.code === "KeyC") {
-    e.preventDefault();
-    const last = [...responses].reverse().find((r) => r.fullText);
-    if (last) {
-      navigator.clipboard.writeText(last.fullText || last.text);
-      alert("Last response copied!");
-    }
-  }
+      // Copy last response to clipboard (Alt+Shift+C)
+      if (e.altKey && e.shiftKey && e.code === "KeyC") {
+        e.preventDefault();
+        const last = [...responses].reverse().find((r) => r.fullText);
+        if (last) {
+          navigator.clipboard.writeText(last.fullText || last.text);
+          alert("Last response copied!");
+        }
+      }
 
-  // Delete all chats (Alt+Shift+D)
-  if (e.altKey && e.shiftKey && e.code === "KeyD") {
-    e.preventDefault();
-    setResponses([]);
-  }
-};
+      // Delete all chats (Alt+Shift+D)
+      if (e.altKey && e.shiftKey && e.code === "KeyD") {
+        e.preventDefault();
+        setResponses([]);
+      }
+    };
 
 
     window.addEventListener("keydown", handleKeyDown);
@@ -203,9 +203,7 @@ const handleKeyDown = (e) => {
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
-            <option value="gpt-4o-mini">Lawyer 1</option>
-            <option value="gpt-4">Lawyer 2</option>
-            <option value="gpt-3.5-turbo">Lawyer 3</option>
+            <option value="SukhdevTechsteck/US-Law-v3">US Law v3</option>
           </select>
 
           <select
@@ -259,22 +257,22 @@ const handleKeyDown = (e) => {
               <FiCpu className="text-blue-500 mt-1" />
               <div className="p-4 bg-white border rounded-2xl shadow-md text-gray-800 leading-relaxed">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {res.text}
+                  {res.text.replace(/Refer:/g, "\n\n**Refer:**")}
                 </ReactMarkdown>
               </div>
             </div>
 
             {res.citations && res.citations.length > 0 && (
               <div className="ml-7 p-3 bg-gray-100 border rounded-lg text-xs">
-                <p className="font-medium mb-1">Sources:</p>
-                <ul className="space-y-1">
+                {/* <p className="font-medium mb-1">Sources:</p> */}
+                {/* <ul className="space-y-1">
                   {res.citations.map((c, i) => (
                     <li key={i}>
                       <span className="font-mono">{c.source}</span>
                       {c.page ? `, p.${c.page}` : ""}
                     </li>
                   ))}
-                </ul>
+                </ul> */}
               </div>
             )}
           </motion.div>
