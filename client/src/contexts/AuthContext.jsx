@@ -18,7 +18,6 @@ export const AuthProvider = ({ children }) => {
   const API_BASE = import.meta.env.VITE_API_BASE || "https://rossai.onrender.com";
 
   useEffect(() => {
-    // Check if token exists and decode user info
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split(".")[1]));

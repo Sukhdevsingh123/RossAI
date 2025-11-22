@@ -32,7 +32,6 @@ def _resolve_prompt(task: str, prompt_key: Optional[str], custom_prompt: Optiona
     return defaults.get(task, defaults["qa"])
 
 def _make_prompt(template: str) -> PromptTemplate:
-    # We insert the template text directly into the system prompt
     system = (
         f"{template}\n\n"
         "Rules:\n"

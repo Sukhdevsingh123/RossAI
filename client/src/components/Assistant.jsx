@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { motion } from "framer-motion";
 
 const API_BASE = "https://rossai.onrender.com";
-// const API_BASE = "http://0.0.0.0:8000";
+
 function Assistant({ sources, setSources, responses, setResponses }) {
   const [query, setQuery] = useState("");
   const [loadingAsk, setLoadingAsk] = useState(false);
