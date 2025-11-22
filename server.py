@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from rag_pipeline import answer_query
 from vector_database import load_any, create_chunks, store_in_pinecone
 import uvicorn
+from pydantic import BaseModel
+import json
+from openai import OpenAI
 
 app = FastAPI()
 
@@ -22,6 +25,8 @@ app.add_middleware(
 
 uploads_dir = "pdfs"
 os.makedirs(uploads_dir, exist_ok=True)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ---------- Upload API ----------
 @app.post("/api/upload")
@@ -128,5 +133,171 @@ async def ask(req: AskRequest):
             model=req.model,
         )
         return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+JUDGE_DETECT_PROMPT = """
+Determine whether the user's message is asking about a judge or judicial behavior.
+Respond only with:
+
+- "judge_query"       → if the message clearly relates to a judge, court behavior, rulings, strategy, tendencies, etc.
+- "normal_query"      → if the message is not related to judges or courts at all.
+
+Message: {{MESSAGE}}
+"""
+
+JUDGE_NAME_PROMPT = """
+Extract the judge name mentioned in the message. 
+If no clear judge name is mentioned, respond with "none".
+
+Message: {{MESSAGE}}
+"""
+
+JUDGE_PROMPT = """
+You are to generate a fully synthetic, fictional judge profile.
+The profile must NOT resemble any real judge and should be entirely invented.
+Produce strictly JSON in the following schema:
+
+{
+  "judge": "",
+  "sample_size": 0,
+  "case_types": {},
+  "outcomes": [],
+  "citations": [],
+  "tendencies": {
+    "leniency": "",
+    "favorability_patterns": "",
+    "argumentation_style": "",
+    "precedents_frequently_used": []
+  },
+  "recommended_strategy": {
+    "argument_style": "",
+    "phrasing_examples": [],
+    "precedents_to_use": [],
+    "points_to_avoid": []
+  }
+}
+
+Guidelines:
+- All content must be fictional.
+- `sample_size` should be a synthetic integer (e.g., 5–40).
+- `case_types` should include 2–4 fake categories with percentages.
+- `outcomes` should be fictional or generic (e.g., "motions granted", "appeals upheld").
+- `citations` should be fictional references (e.g., "R v Thornton (2019)").
+- Tendencies and strategies should be plausible but entirely fabricated.
+- Do NOT break JSON format.
+
+Judge Name: {{JUDGE_NAME}}
+"""
+
+INTERPRET_PROMPT = """
+You are an assistant that extracts ONLY the relevant fields from a judge profile JSON
+based on the user's question.
+
+You must follow these rules:
+
+- If the user asks for a specific field (e.g., “leniency”, “case types”, 
+  “strategy”, “citations”), return ONLY that field in JSON.
+- If the user asks for multiple specific fields, return only those.
+- If the user asks for something broad like “Give judge profile”, return the entire profile.
+- If the question is unclear, return the full profile.
+- Output must always be valid JSON.
+
+User question: {{QUESTION}}
+
+Judge profile JSON:
+{{PROFILE}}
+"""
+
+
+
+class JudgeRequest(BaseModel):
+    judge: str
+    model: str = "gpt-4o-mini"
+
+@app.post("/api/judge")
+async def judge_router(req: JudgeRequest):
+    try:
+        user_msg = req.judge  # keeping same param name for compatibility
+
+        # ---------------- STEP 1: Is this a judge query? ----------------
+        detect_prompt = JUDGE_DETECT_PROMPT.replace("{{MESSAGE}}", user_msg)
+
+        detect_response = client.chat.completions.create(
+            model=req.model,
+            messages=[
+                {"role": "system", "content": "Analyze message intent."},
+                {"role": "user", "content": detect_prompt}
+            ],
+            temperature=0
+        )
+
+        mode = detect_response.choices[0].message.content.strip()
+
+        if mode == "normal_query":
+            # Return a regular chat completion
+            normal_response = client.chat.completions.create(
+                model=req.model,
+                messages=[
+                    {"role": "user", "content": user_msg}
+                ]
+            )
+            return {
+                "status": "success",
+                "answer": normal_response.choices[0].message.content
+            }
+
+        # ---------------- STEP 2: Extract judge name (optional) ----------------
+        name_prompt = JUDGE_NAME_PROMPT.replace("{{MESSAGE}}", user_msg)
+        name_response = client.chat.completions.create(
+            model=req.model,
+            messages=[
+                {"role": "system", "content": "Extract judge names."},
+                {"role": "user", "content": name_prompt}
+            ],
+            temperature=0
+        )
+
+        judge_name = name_response.choices[0].message.content.strip()
+
+        if judge_name.lower() == "none":
+            judge_name = "Justice Placeholder"  # generates synthetic
+
+        # ---------------- STEP 3: Generate full synthetic profile ----------------
+        profile_prompt = JUDGE_PROMPT.replace("{{JUDGE_NAME}}", judge_name)
+
+        profile_response = client.chat.completions.create(
+            model=req.model,
+            messages=[
+                {"role": "system", "content": "Generate fictional judge profiles."},
+                {"role": "user", "content": profile_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3
+        )
+
+        full_profile = profile_response.choices[0].message.content
+
+        # ---------------- STEP 4: Interpret user's question ----------------
+        interpret_prompt = (
+            INTERPRET_PROMPT
+            .replace("{{QUESTION}}", user_msg)
+            .replace("{{PROFILE}}", full_profile)
+        )
+
+        interpret_response = client.chat.completions.create(
+            model=req.model,
+            messages=[
+                {"role": "system", "content": "Return only relevant JSON fields."},
+                {"role": "user", "content": interpret_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0
+        )
+
+        filtered = interpret_response.choices[0].message.content
+
+        return {"status": "success", "profile": json.loads(filtered)}
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
