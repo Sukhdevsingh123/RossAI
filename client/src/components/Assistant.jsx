@@ -3,27 +3,18 @@ import { FiFileText, FiSend, FiUploadCloud, FiUser, FiCpu } from "react-icons/fi
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion } from "framer-motion";
-
-const API_BASE = "https://rossai.onrender.com";
+import { useAuth } from "../contexts/AuthContext";
 
 function Assistant({ sources, setSources, responses, setResponses }) {
+  const { API_BASE, getAuthHeaders, isAuthenticated } = useAuth();
   const [query, setQuery] = useState("");
   const [loadingAsk, setLoadingAsk] = useState(false);
   const [loadingUpload, setLoadingUpload] = useState(false);
-  const [task, setTask] = useState("qa");
-  const [prompts, setPrompts] = useState({ shared: {}, private: {} });
-  const [promptKey, setPromptKey] = useState("qa_default");
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [model, setModel] = useState("SukhdevTechsteck/US-Law-v3");
 
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/prompts`)
-      .then((r) => r.json())
-      .then(setPrompts)
-      .catch(() => { });
 
     const handleDrop = (e) => {
       e.preventDefault();
@@ -56,9 +47,9 @@ function Assistant({ sources, setSources, responses, setResponses }) {
       // Edit last message (Alt+E)
       if (e.altKey && !e.shiftKey && e.code === "KeyE") {
         e.preventDefault();
-        const last = [...responses].reverse().find((r) => r.question);
+        const last = [...responses].reverse().find((r) => r.type === "user");
         if (last) {
-          setQuery(last.question);
+          setQuery(last.text);
           setResponses((prev) => prev.filter((r) => r.id !== last.id));
         }
       }
@@ -98,29 +89,59 @@ function Assistant({ sources, setSources, responses, setResponses }) {
 
   const uploadFiles = async (files) => {
     if (!files || files.length === 0) return;
-    const formData = new FormData();
-    Array.from(files).forEach((f) => formData.append("files", f));
+    
+    if (!isAuthenticated) {
+      setResponses((prev) => [
+        ...prev,
+        { id: Date.now(), text: "⚠️ Please login to upload files." },
+      ]);
+      return;
+    }
 
     setSources((prev) => [
       ...prev,
       ...Array.from(files).map((f) => ({ id: Date.now() + f.name, name: f.name })),
     ]);
 
-    try {
-      setLoadingUpload(true);
-      const res = await fetch(`${API_BASE}/api/upload`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Upload failed");
-      await res.json();
-    } catch {
-      setResponses((prev) => [
-        ...prev,
-        { id: Date.now(), text: "⚠️ Error uploading file(s)." },
-      ]);
-    } finally {
-      setLoadingUpload(false);
+    // Upload files one by one (backend expects single file)
+    for (const file of Array.from(files)) {
+      if (file.type !== "application/pdf") {
+        setResponses((prev) => [
+          ...prev,
+          { id: Date.now(), text: `⚠️ ${file.name} is not a PDF file. Only PDF files are supported.` },
+        ]);
+        continue;
+      }
+
+      try {
+        setLoadingUpload(true);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch(`${API_BASE}/upload`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.detail || "Upload failed");
+        }
+
+        const data = await res.json();
+        setResponses((prev) => [
+          ...prev,
+          { id: Date.now(), text: `✅ ${file.name} uploaded successfully! Document ID: ${data.doc_id}, Chunks: ${data.chunks}` },
+        ]);
+      } catch (err) {
+        setResponses((prev) => [
+          ...prev,
+          { id: Date.now(), text: `⚠️ Error uploading ${file.name}: ${err.message}` },
+        ]);
+      } finally {
+        setLoadingUpload(false);
+      }
     }
   };
 
@@ -131,35 +152,54 @@ function Assistant({ sources, setSources, responses, setResponses }) {
 
   const handleAsk = async () => {
     if (!query.trim()) return;
+
+    if (!isAuthenticated) {
+      setResponses((prev) => [
+        ...prev,
+        { id: Date.now(), text: "⚠️ Please login to chat with documents." },
+      ]);
+      return;
+    }
+
     setLoadingAsk(true);
 
-    try {
-      const payload = {
-        question: query,
-        task,
-        top_k: 6,
-        model,
-        promptKey: customPrompt.trim() ? null : promptKey,
-        customPrompt: customPrompt.trim() || null,
-      };
+    const question = query;
+    setQuery("");
 
-      const res = await fetch(`${API_BASE}/api/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    // Add user question to responses
+    const userMessageId = Date.now();
+    setResponses((prev) => [
+      ...prev,
+      { id: userMessageId, text: question, question: question, type: "user" },
+    ]);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/chat?query=${encodeURIComponent(question)}`,
+        {
+          method: "GET",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || "Chat failed");
+      }
 
       const data = await res.json();
       const responseText = data.answer || "⚠️ No response";
-      const citations = data.sources || [];
 
       const newId = Date.now();
       setResponses((prev) => [
         ...prev,
-        { id: newId, text: "", fullText: responseText, question: query, citations },
+        { id: newId, text: "", fullText: responseText, question: null },
       ]);
-      setQuery("");
 
+      // Typewriter effect
       let i = 0;
       const interval = setInterval(() => {
         setResponses((prev) =>
@@ -170,67 +210,18 @@ function Assistant({ sources, setSources, responses, setResponses }) {
         i++;
         if (i >= responseText.length) clearInterval(interval);
       }, 18);
-    } catch {
+    } catch (err) {
       setResponses((prev) => [
         ...prev,
-        { id: Date.now(), text: "⚠️ Error fetching response." },
+        { id: Date.now(), text: `⚠️ Error: ${err.message}` },
       ]);
     } finally {
       setLoadingAsk(false);
     }
   };
 
-  const promptOptions = Object.keys(prompts.shared || {});
-
   return (
     <div className="flex flex-col h-full bg-gray-50">
-      {/* Controls */}
-      <div className="border-b bg-white shadow-sm px-6 py-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <select
-            className="px-3 py-2 border rounded-lg text-sm"
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-          >
-            <option value="qa">Answer Questions</option>
-            <option value="summarize">Summarize</option>
-            <option value="identify_risks">Identify Risks</option>
-            <option value="draft_email">Draft Email</option>
-          </select>
-
-          <select
-            className="px-3 py-2 border rounded-lg text-sm"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-          >
-            <option value="SukhdevTechsteck/US-Law-v3">US Law v3</option>
-          </select>
-
-          <select
-            className="px-3 py-2 border rounded-lg text-sm"
-            value={promptKey}
-            onChange={(e) => setPromptKey(e.target.value)}
-            disabled={!!customPrompt.trim()}
-          >
-            {promptOptions.length === 0 ? (
-              <option value="">No prompts</option>
-            ) : (
-              promptOptions.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))
-            )}
-          </select>
-
-          <input
-            className="px-3 py-2 border rounded-lg text-sm"
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder="Custom prompt..."
-          />
-        </div>
-      </div>
 
       {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -242,37 +233,26 @@ function Assistant({ sources, setSources, responses, setResponses }) {
             transition={{ duration: 0.3 }}
             className="space-y-3"
           >
-            {res.question && (
+            {res.type === "user" && (
               <div className="flex justify-end">
                 <div className="flex items-start space-x-2 max-w-xl">
                   <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-md">
-                    <p className="text-sm">{res.question}</p>
+                    <p className="text-sm">{res.text}</p>
                   </div>
                   <FiUser className="text-gray-400 mt-1" />
                 </div>
               </div>
             )}
+            
+            {res.type !== "user" && (
 
-            <div className="flex items-start space-x-2 max-w-2xl">
-              <FiCpu className="text-blue-500 mt-1" />
-              <div className="p-4 bg-white border rounded-2xl shadow-md text-gray-800 leading-relaxed">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {res.text.replace(/Refer:/g, "\n\n**Refer:**")}
-                </ReactMarkdown>
-              </div>
-            </div>
-
-            {res.citations && res.citations.length > 0 && (
-              <div className="ml-7 p-3 bg-gray-100 border rounded-lg text-xs">
-                {/* <p className="font-medium mb-1">Sources:</p> */}
-                {/* <ul className="space-y-1">
-                  {res.citations.map((c, i) => (
-                    <li key={i}>
-                      <span className="font-mono">{c.source}</span>
-                      {c.page ? `, p.${c.page}` : ""}
-                    </li>
-                  ))}
-                </ul> */}
+              <div className="flex items-start space-x-2 max-w-2xl">
+                <FiCpu className="text-blue-500 mt-1" />
+                <div className="p-4 bg-white border rounded-2xl shadow-md text-gray-800 leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {res.text}
+                  </ReactMarkdown>
+                </div>
               </div>
             )}
           </motion.div>
@@ -300,8 +280,7 @@ function Assistant({ sources, setSources, responses, setResponses }) {
           </label>
           <input
             type="file"
-            multiple
-            accept=".pdf,.docx,.xlsx,.zip"
+            accept=".pdf"
             onChange={handleUpload}
             disabled={loadingUpload}
             id="fileInput"

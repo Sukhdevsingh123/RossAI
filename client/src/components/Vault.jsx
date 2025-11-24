@@ -79,6 +79,18 @@ function Vault() {
       return;
     }
 
+    if (!user) {
+      setError("Please login to upload files");
+      return;
+    }
+
+    // Check if user has required scope (owners might not have company_id)
+    const isOwner = user.roles?.includes("owner");
+    if (!isOwner && (!user.company_id || !user.team_id || !user.project_id)) {
+      setError("Your account is missing required scope information. Please contact an administrator.");
+      return;
+    }
+
     setUploading(true);
     setError("");
     setSuccess("");
@@ -87,25 +99,47 @@ function Vault() {
       const formData = new FormData();
       formData.append("file", uploadFile);
 
+      // For FormData, don't set Content-Type - browser will set it with boundary automatically
+      const headers = getAuthHeaders();
+      
+      console.log("[Vault Upload] Uploading to:", `${API_BASE}/upload`);
+      console.log("[Vault Upload] User:", user);
+      console.log("[Vault Upload] File:", uploadFile.name, uploadFile.type, uploadFile.size);
+      console.log("[Vault Upload] Headers:", headers);
+
       const response = await fetch(`${API_BASE}/upload`, {
         method: "POST",
-        headers: getAuthHeaders(),
+        headers: headers, // Only Authorization header, no Content-Type
         body: formData,
       });
 
-      const data = await response.json();
+      console.log("[Vault Upload] Response status:", response.status, response.statusText);
 
-      if (!response.ok) {
-        throw new Error(data.detail || "Upload failed");
+      // Try to parse JSON response
+      let data;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error("[Vault Upload] Non-JSON response:", text);
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
       }
 
+      if (!response.ok) {
+        console.error("[Vault Upload] Error response:", data);
+        throw new Error(data.detail || data.message || `Upload failed: ${response.status}`);
+      }
+
+      console.log("[Vault Upload] Success:", data);
       setSuccess(`File uploaded successfully! Document ID: ${data.doc_id}, Chunks: ${data.chunks}`);
       setUploadFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     } catch (err) {
-      setError(err.message || "Upload failed");
+      console.error("[Vault Upload] Exception:", err);
+      setError(err.message || "Upload failed. Please check your connection and try again.");
     } finally {
       setUploading(false);
     }
